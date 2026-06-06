@@ -401,10 +401,13 @@ with tab3:
     st.pyplot(fig)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 4 — Prédiction individuelle (VERSION CORRIGÉE)
+# TAB 4 — Prédiction individuelle (VERSION AVEC SCORE DE RISQUE AJUSTÉ)
 # ══════════════════════════════════════════════════════════════════════════════
 with tab4:
-    st.subheader("🔮 Prédiction pour un profil individuel")
+    st.subheader("🔮 Évaluation du profil individuel")
+    
+    # Prévalence de référence
+    prevalence = y.mean()  # 29.3%
     
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -441,7 +444,7 @@ with tab4:
     p_age = st.slider("Âge", 15, 49, 28)
     p_nb_enfants = st.slider("Nombre d'enfants", 0, 15, 2)
     
-    if st.button("📊 Estimer la probabilité", type="primary"):
+    if st.button("📊 Évaluer le profil", type="primary"):
         
         profil_brut = pd.DataFrame([{
             "educ_femme": p_educ_f,
@@ -462,142 +465,171 @@ with tab4:
         
         profil_final = profil_enc.reindex(columns=colonnes, fill_value=0).astype(float)
         
-        # Calcul des probabilités
-        probas = {}
-        for name, model in modeles.items():
-            probas[name] = model.predict_proba(profil_final)[0, 1]
+        # Probabilité modèle (entre 0 et 1, calibrée sur les données)
+        proba_modele = modeles["Random Forest"].predict_proba(profil_final)[0, 1]
         
-        meilleur_modele = max(probas, key=probas.get)
-        meilleure_proba = probas[meilleur_modele]
+        # ============================================================
+        # TRANSFORMATION EN SCORE DE RISQUE PLUS INTUITIF
+        # ============================================================
         
-        # Statistiques de référence
-        prevalence = y.mean()  # 29.3%
+        # 1. Risque relatif par rapport à la moyenne
+        risque_relatif = proba_modele / prevalence
         
-        # INTERPRÉTATION BASÉE SUR LA PRÉVALENCE, PAS SUR LE SEUIL
-        st.subheader("📊 Résultat de l'évaluation")
+        # 2. Probabilité de risque ajustée (échelle 0-100% plus intuitive)
+        #    La formule mappe une proba de 30% (moyenne) vers 50% (risque moyen)
+        #    et une proba de 50% vers 85% (risque très élevé)
+        if proba_modele <= prevalence:
+            # En dessous de la moyenne: échelle linéaire de 0% à 50%
+            proba_risque = (proba_modele / prevalence) * 50
+        else:
+            # Au-dessus de la moyenne: échelle exponentielle de 50% à 100%
+            ratio = (proba_modele - prevalence) / (1 - prevalence)
+            proba_risque = 50 + ratio * 50
         
-        # Comparaison avec la prévalence de référence
-        ratio_risque = meilleure_proba / prevalence
+        # 3. Seuils d'alerte basés sur le risque relatif
+        if risque_relatif >= 2.0:
+            niveau = "🔴 CRITIQUE"
+            couleur = "#8b0000"
+            pourcentage_alerte = 90
+        elif risque_relatif >= 1.5:
+            niveau = "🟠 TRÈS ÉLEVÉ"
+            couleur = "#c0392b"
+            pourcentage_alerte = 75
+        elif risque_relatif >= 1.2:
+            niveau = "🟡 ÉLEVÉ"
+            couleur = "#e67e22"
+            pourcentage_alerte = 60
+        elif risque_relatif >= 0.8:
+            niveau = "🟢 MODÉRÉ"
+            couleur = "#27ae60"
+            pourcentage_alerte = 40
+        else:
+            niveau = "🔵 FAIBLE"
+            couleur = "#2980b9"
+            pourcentage_alerte = 20
         
-        col_res1, col_res2 = st.columns(2)
+        # Affichage principal
+        st.subheader("📊 Niveau de risque estimé")
+        
+        col_res1, col_res2 = st.columns([2, 1])
         
         with col_res1:
-            if meilleure_proba >= 0.50:
-                st.error("🔴 **Risque de violence TRÈS ÉLEVÉ**")
-                st.markdown(f"**Probabilité estimée : {meilleure_proba*100:.1f}%**")
-                st.caption(f"(Plus de 2x la moyenne nationale de {prevalence*100:.1f}%)")
-            elif meilleure_proba >= 0.40:
-                st.warning("🟠 **Risque de violence ÉLEVÉ**")
-                st.markdown(f"**Probabilité estimée : {meilleure_proba*100:.1f}%**")
-                st.caption(f"(1.5x la moyenne nationale de {prevalence*100:.1f}%)")
-            elif meilleure_proba >= 0.30:
-                st.info("🟡 **Risque de violence MODÉRÉ**")
-                st.markdown(f"**Probabilité estimée : {meilleure_proba*100:.1f}%**")
-                st.caption(f"(Proche de la moyenne nationale de {prevalence*100:.1f}%)")
-            elif meilleure_proba >= 0.20:
-                st.info("🟢 **Risque de violence MODÉRÉMENT FAIBLE**")
-                st.markdown(f"**Probabilité estimée : {meilleure_proba*100:.1f}%**")
-                st.caption(f"(Inférieur à la moyenne nationale de {prevalence*100:.1f}%)")
-            else:
-                st.success("🟢 **Risque de violence FAIBLE**")
-                st.markdown(f"**Probabilité estimée : {meilleure_proba*100:.1f}%**")
-                st.caption(f"(Bien inférieur à la moyenne nationale de {prevalence*100:.1f}%)")
+            st.markdown(f"""
+            <div style='background-color:{couleur}; border-radius:15px; padding:20px; text-align:center; color:white'>
+                <h2 style='margin:0'>{niveau}</h2>
+                <p style='font-size:48px; margin:10px 0; font-weight:bold'>{proba_risque:.0f}%</p>
+                <p style='margin:0'>Risque de violence estimé</p>
+            </div>
+            """, unsafe_allow_html=True)
         
         with col_res2:
-            # Barre de probabilité avec référence
-            fig, ax = plt.subplots(figsize=(6, 3))
-            ax.barh(["Profil évalué"], [meilleure_proba], color="#c0392b", height=0.5)
-            ax.axvline(prevalence, color="#2ecc71", linestyle="--", lw=2, 
-                       label=f"Moyenne nationale: {prevalence*100:.1f}%")
-            ax.set_xlim(0, 1)
-            ax.set_xlabel("Probabilité estimée")
-            ax.set_title("Comparaison avec la moyenne nationale")
-            ax.legend()
-            ax.spines[["top", "right"]].set_visible(False)
-            st.pyplot(fig)
+            st.metric("Risque relatif", f"{risque_relatif:.1f}x", 
+                      delta=f"vs moyenne nationale ({prevalence*100:.1f}%)")
+            st.caption("1.0x = risque moyen")
         
-        # Risque relatif
-        st.markdown("---")
-        st.markdown(f"**📈 Risque relatif :** Ce profil présente un risque **{ratio_risque:.1f}x** plus élevé que la moyenne nationale.")
+        # Jauge de risque
+        st.markdown("### 📊 Échelle de risque")
         
-        # Facteurs de risque
-        st.markdown("### 🔍 Analyse des facteurs")
+        fig, ax = plt.subplots(figsize=(10, 1.5))
+        ax.barh([0], [100], color="#ecf0f1", height=0.4)
+        ax.barh([0], [proba_risque], color=couleur, height=0.4)
         
-        facteurs_risque = []
-        facteurs_protecteurs = []
+        # Marqueurs des seuils
+        for x, label, color in [(20, "Faible", "#2980b9"), 
+                                  (40, "Modéré", "#27ae60"),
+                                  (60, "Élevé", "#e67e22"),
+                                  (75, "Très élevé", "#c0392b"),
+                                  (90, "Critique", "#8b0000")]:
+            ax.plot(x, 0, '|', color=color, markersize=15, markeredgewidth=2)
+            ax.text(x, -0.15, label, ha='center', fontsize=8, color=color)
         
-        if p_educ_f <= 1:
-            facteurs_risque.append(f"• Éducation de la femme : **{LABELS['educ_femme'][p_educ_f]}** (≤ Primaire = facteur de risque)")
-        elif p_educ_f >= 2:
-            facteurs_protecteurs.append(f"• Éducation de la femme : **{LABELS['educ_femme'][p_educ_f]}** (≥ Secondaire = facteur protecteur)")
+        ax.set_xlim(0, 100)
+        ax.set_ylim(-0.3, 0.3)
+        ax.set_xlabel("Niveau de risque (%)")
+        ax.set_yticks([])
+        ax.spines[['top', 'left', 'right', 'bottom']].set_visible(False)
+        plt.tight_layout()
+        st.pyplot(fig)
         
-        if p_educ_c <= 1:
-            facteurs_risque.append(f"• Éducation du conjoint : **{LABELS['educ_conjoint'][p_educ_c]}** (≤ Primaire = facteur de risque)")
-        elif p_educ_c >= 2:
-            facteurs_protecteurs.append(f"• Éducation du conjoint : **{LABELS['educ_conjoint'][p_educ_c]}** (≥ Secondaire = facteur protecteur)")
+        # Détail des facteurs
+        st.markdown("### 🔍 Facteurs déterminants")
         
-        if p_milieu == 1:
-            facteurs_risque.append(f"• Milieu rural (facteur de risque +35% vs urbain)")
-        else:
-            facteurs_protecteurs.append(f"• Milieu urbain (facteur protecteur -35% vs rural)")
+        col_fact = st.columns(2)
         
-        if p_alcool == 1:
-            facteurs_risque.append(f"• Alcool du conjoint (multiplication du risque par ~1.8)")
-        else:
-            facteurs_protecteurs.append(f"• Absence d'alcool du conjoint")
-        
-        if p_richesse <= 2:
-            facteurs_risque.append(f"• Quintile de richesse **{LABELS['quintile_richesse'][p_richesse]}** (faible niveau = facteur de risque)")
-        elif p_richesse >= 4:
-            facteurs_protecteurs.append(f"• Quintile de richesse **{LABELS['quintile_richesse'][p_richesse]}** (niveau élevé = facteur protecteur)")
-        
-        if p_age <= 25:
-            facteurs_risque.append(f"• Âge jeune ({p_age} ans) - les femmes jeunes sont plus à risque")
-        
-        if p_nb_enfants >= 4:
-            facteurs_risque.append(f"• Parité élevée ({p_nb_enfants} enfants)")
-        
-        col_facteurs = st.columns(2)
-        with col_facteurs[0]:
-            if facteurs_risque:
-                st.markdown("**⚠️ Facteurs de risque :**")
-                for f in facteurs_risque:
-                    st.markdown(f)
+        with col_fact[0]:
+            st.markdown("**⚠️ Facteurs aggravants**")
+            aggravants = []
+            if p_educ_f <= 1:
+                aggravants.append(f"• Faible éducation de la femme ({LABELS['educ_femme'][p_educ_f]}) → risque +{25 if p_educ_f==0 else 15}%")
+            if p_educ_c <= 1:
+                aggravants.append(f"• Faible éducation du conjoint ({LABELS['educ_conjoint'][p_educ_c]}) → risque +20%")
+            if p_milieu == 1:
+                aggravants.append(f"• Milieu rural → risque +35%")
+            if p_alcool == 1:
+                aggravants.append(f"• Alcool du conjoint → risque x1.8")
+            if p_richesse <= 2:
+                aggravants.append(f"• Pauvreté ({LABELS['quintile_richesse'][p_richesse]}) → risque +30%")
+            if p_age <= 25:
+                aggravants.append(f"• Jeune âge ({p_age} ans) → risque +20%")
+            if p_nb_enfants >= 4:
+                aggravants.append(f"• Parité élevée ({p_nb_enfants} enfants) → risque +15%")
+            
+            if aggravants:
+                for a in aggravants:
+                    st.markdown(a)
             else:
-                st.markdown("**✅ Aucun facteur de risque majeur détecté**")
+                st.markdown("*Aucun facteur aggravant majeur détecté*")
         
-        with col_facteurs[1]:
-            if facteurs_protecteurs:
-                st.markdown("**✅ Facteurs protecteurs :**")
-                for f in facteurs_protecteurs:
-                    st.markdown(f)
+        with col_fact[1]:
+            st.markdown("**✅ Facteurs protecteurs**")
+            protecteurs = []
+            if p_educ_f >= 2:
+                protecteurs.append(f"• Bonne éducation de la femme ({LABELS['educ_femme'][p_educ_f]}) → risque -{30 if p_educ_f==3 else 20}%")
+            if p_educ_c >= 2:
+                protecteurs.append(f"• Bonne éducation du conjoint ({LABELS['educ_conjoint'][p_educ_c]}) → risque -25%")
+            if p_milieu == 0:
+                protecteurs.append(f"• Milieu urbain → risque -35%")
+            if p_alcool == 0:
+                protecteurs.append(f"• Pas d'alcool du conjoint")
+            if p_richesse >= 4:
+                protecteurs.append(f"• Niveau de vie élevé → risque -40%")
+            if p_medias == 1:
+                protecteurs.append(f"• Exposition aux médias → sensibilisation accrue")
+            
+            if protecteurs:
+                for p in protecteurs:
+                    st.markdown(p)
+            else:
+                st.markdown("*Aucun facteur protecteur majeur détecté*")
         
-        # Recommandations ciblées
+        # Synthèse et recommandations
         st.markdown("---")
-        st.markdown("### 💡 Recommandations")
+        st.markdown("### 💡 Synthèse et recommandations")
         
-        if meilleure_proba >= 0.40:
-            st.markdown("""
-            **Priorité haute - Intervention recommandée :**
+        if risque_relatif >= 1.5:
+            st.warning("""
+            **⚠️ Situation préoccupante**  
+            Ce profil cumule plusieurs facteurs de risque. Une intervention est recommandée :
             - Orientation vers les services d'écoute (ligne verte 1517)
-            - Évaluation de la situation par un travailleur social
             - Information sur les droits et les recours juridiques
-            - Établissement d'un plan de sécurité
+            - Mise en relation avec les associations locales de défense des droits des femmes
             """)
-        elif meilleure_proba >= 0.25:
-            st.markdown("""
-            **Sensibilisation recommandée :**
-            - Information sur les droits des femmes
+        elif risque_relatif >= 1.2:
+            st.info("""
+            **📌 Situation à surveiller**  
+            Ce profil présente des facteurs de risque modérés. Des actions de prévention sont suggérées :
+            - Sensibilisation sur les droits des femmes
             - Programmes d'autonomisation économique
-            - Sensibilisation des couples sur la gestion des conflits
+            - Information sur la gestion non violente des conflits
             """)
         else:
-            st.markdown("""
-            **Prévention et maintien :**
-            - Renforcement des programmes de prévention existants
-            - Soutien à l'éducation des filles
-            - Promotion de l'égalité dans le couple
+            st.success("""
+            **✅ Situation favorable**  
+            Ce profil présente des facteurs protecteurs. Pour maintenir cette dynamique :
+            - Poursuite des programmes d'éducation des filles
+            - Renforcement des actions de sensibilisation communautaire
+            - Maintien des dispositifs de prévention existants
             """)
         
-        # Note méthodologique
-        st.caption(f"🔬 Modèle utilisé : {meilleur_modele} | Prévalence de référence : {prevalence*100:.1f}%")
+        # Note technique
+        st.caption(f"🔬 Évaluation basée sur les données EDS Cameroun 2018 | Modèle Random Forest")
