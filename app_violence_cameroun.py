@@ -9,7 +9,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Style CSS professionnel avec fond et drapeau
+# Style CSS professionnel
 st.markdown("""
 <style>
     /* Sidebar verte uniquement */
@@ -30,6 +30,7 @@ st.markdown("""
         text-align: center;
         margin-bottom: 2rem;
         box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        position: relative;
     }
     .main-header h1 {
         margin: 0;
@@ -134,13 +135,40 @@ st.markdown("""
         border-radius: 10px;
         border: 1px solid #e0e0e0;
     }
+    
+    .flag-img {
+        position: absolute;
+        right: 20px;
+        top: 20px;
+        width: 60px;
+        height: auto;
+        border-radius: 5px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    
+    .flag-footer {
+        width: 30px;
+        height: auto;
+        vertical-align: middle;
+        margin: 0 5px;
+    }
+    
+    .flag-resources {
+        width: 25px;
+        height: auto;
+        vertical-align: middle;
+        margin-right: 5px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# En-tête avec drapeau
-st.markdown("""
+# URL du drapeau Cameroun
+FLAG_URL = "https://upload.wikimedia.org/wikipedia/commons/4/4f/Flag_of_Cameroon.svg"
+
+# En-tête avec drapeau réel
+st.markdown(f"""
 <div class="main-header">
-    <div class="flag-decoration">🇨🇲</div>
+    <img src="{FLAG_URL}" class="flag-img" alt="Drapeau Cameroun">
     <h1>🛡️ Prédiction du Risque de Violence Conjugale</h1>
     <p>Cameroun - Enquête Démographique et de Santé (EDS) 2018</p>
 </div>
@@ -281,9 +309,9 @@ if st.button("🔮 PRÉDIRE LE RISQUE", type="primary", use_container_width=True
 # ============================================================
 
 with st.expander("📞 Ressources d'aide et numéros d'urgence", expanded=False):
-    st.markdown("""
+    st.markdown(f"""
     <div class="warning-card">
-    <strong>🔴 NUMÉROS D'URGENCE CAMEROUN 🇨🇲</strong><br><br>
+    <strong>🔴 NUMÉROS D'URGENCE CAMEROUN <img src="{FLAG_URL}" class="flag-resources" alt="Drapeau Cameroun"></strong><br><br>
     <strong>🚔 Police : 117</strong><br>
     <strong>🏛️ MINPROFF : +237 222 23 45 67</strong><br>
     <strong>🤝 ALVF : +237 699 88 77 66</strong><br><br>
@@ -297,9 +325,9 @@ with st.expander("📞 Ressources d'aide et numéros d'urgence", expanded=False)
 # FOOTER
 # ============================================================
 
-st.markdown("""
+st.markdown(f"""
 <div class="footer">
-    <p>🇨🇲 <strong>République du Cameroun - Paix - Travail - Patrie</strong> 🇨🇲</p>
+    <p><img src="{FLAG_URL}" class="flag-footer" alt="Drapeau Cameroun"> <strong>République du Cameroun - Paix - Travail - Patrie</strong> <img src="{FLAG_URL}" class="flag-footer" alt="Drapeau Cameroun"></p>
     <p>📊 Modèle entraîné sur 6 450 femmes (EDS Cameroun 2018) | AUC = 0,75 | Régression logistique</p>
     <p>📞 En cas d'urgence, appelez le <strong>117</strong> (police) ou le <strong>+237 222 23 45 67</strong> (MINPROFF)</p>
     <p>© 2026 - Outil à but non lucratif - Données anonymisées</p>
