@@ -793,7 +793,7 @@ elif page == "🔍 Explicabilité (SHAP)":
         elif isinstance(sv, np.ndarray) and sv.ndim == 3:
             sv = sv[:, :, 1]
 
-        # ── Normalisation ev : liste / array de longueur quelconque → scalaire ──
+        # ── Normalisation ev : liste / array → scalaire ──
         if isinstance(ev, (list, np.ndarray)):
             ev = np.atleast_1d(ev)
             ev = float(ev[1]) if len(ev) > 1 else float(ev[0])
@@ -810,11 +810,12 @@ elif page == "🔍 Explicabilité (SHAP)":
     st.info(f"**Variable la plus influente :** {FEATURES_FR[top_feat]} "
             f"(|SHAP| moyen = {shap_imp[top_feat]:.4f})")
 
-    tabs = st.tabs(["📊 Importance globale", "🐝 Beeswarm",
-                    "📉 Dependence plots", "🌊 Profil individuel"])
+    # --- Création des onglets ---
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Importance globale", "🐝 Beeswarm", 
+                                       "📉 Dependence plots", "🌊 Profil individuel"])
 
-    # ── Importance globale ──
-    with tabs[0]:
+    # ── Tab 1: Importance globale ──
+    with tab1:
         shap_df = pd.DataFrame({
             "Feature"    : [FEATURES_FR[f] for f in FEATURES],
             "SHAP moyen" : shap_imp.values
@@ -842,29 +843,31 @@ elif page == "🔍 Explicabilité (SHAP)":
         }).sort_values("|SHAP| moyen", ascending=False)
         st.dataframe(shap_table.set_index("Rang"), use_container_width=True)
 
-# ── Beeswarm ──
-with tabs[1]:
-    st.markdown("Chaque point représente une observation. "
-                "**Rouge** = valeur élevée de la feature | "
-                "**Bleu** = valeur faible.")
-    
-    shap_exp = shap.Explanation(
-        values=sv,
-        base_values=np.full(len(X_exp_df), ev),
-        data=X_exp_df.values,
-        feature_names=[FEATURES_FR[f] for f in FEATURES]
-    )
-    
-    # Correction : ne pas passer d'axe, utiliser plot_size pour contrôler la taille
-    plt.figure(figsize=(10, 7))
-    shap.plots.beeswarm(shap_exp, max_display=14, show=False)
-    plt.title("Beeswarm SHAP – Impact de chaque feature sur la prédiction", fontsize=11)
-    plt.tight_layout()
-    st.pyplot(plt.gcf())
-    plt.close()
+    # ── Tab 2: Beeswarm (CORRIGÉ) ──
+    with tab2:
+        st.markdown("Chaque point représente une observation. "
+                    "**Rouge** = valeur élevée de la feature | "
+                    "**Bleu** = valeur faible.")
+        
+        shap_exp = shap.Explanation(
+            values=sv,
+            base_values=np.full(len(X_exp_df), ev),
+            data=X_exp_df.values,
+            feature_names=[FEATURES_FR[f] for f in FEATURES]
+        )
+        
+        # Créer une figure avec l'axe
+        fig, ax = plt.subplots(figsize=(10, 7))
+        
+        # Appeler beeswarm avec l'axe
+        shap.plots.beeswarm(shap_exp, max_display=14, show=False, ax=ax)
+        ax.set_title("Beeswarm SHAP – Impact de chaque feature sur la prédiction", fontsize=11)
+        fig.tight_layout()
+        st.pyplot(fig)
+        plt.close()
 
-    # ── Dependence plots ──
-    with tabs[2]:
+    # ── Tab 3: Dependence plots ──
+    with tab3:
         feat_label = st.selectbox(
             "Choisir la variable",
             options=[FEATURES_FR[f] for f in FEATURES],
@@ -887,8 +890,8 @@ with tabs[1]:
         st.pyplot(fig)
         plt.close()
 
-    # ── Profil individuel (waterfall) ──
-    with tabs[3]:
+    # ── Tab 4: Profil individuel (waterfall) ──
+    with tab4:
         y_pred_prob_exp = model.predict_proba(X_exp)[:, 1]
         idx_options     = np.argsort(y_pred_prob_exp)[::-1]
 
@@ -905,6 +908,7 @@ with tabs[1]:
             "Valeur"   : X_exp_df.iloc[real_idx].values
         }).sort_values("SHAP")
 
+        # Prendre les 5 plus grands et 5 plus petits
         top_n = pd.concat([df_wf.head(5), df_wf.tail(5)])
 
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -920,8 +924,9 @@ with tabs[1]:
             f"| Classe réelle : {'Victime' if real_lab == 1 else 'Non victime'}",
             fontsize=10
         )
-        rouge_p = mpatches.Patch(color=C_ROUGE, label="↑ Augmente le risque")
-        vert_p  = mpatches.Patch(color=C_VERT,  label="↓ Diminue le risque")
+        from matplotlib.patches import Patch
+        rouge_p = Patch(color=C_ROUGE, label="↑ Augmente le risque")
+        vert_p  = Patch(color=C_VERT,  label="↓ Diminue le risque")
         ax.legend(handles=[rouge_p, vert_p])
         plt.tight_layout()
         st.pyplot(fig)
