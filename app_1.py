@@ -843,28 +843,53 @@ elif page == "🔍 Explicabilité (SHAP)":
         }).sort_values("|SHAP| moyen", ascending=False)
         st.dataframe(shap_table.set_index("Rang"), use_container_width=True)
 
-    # ── Tab 2: Beeswarm (CORRIGÉ) ──
+# ── Tab 2: Beeswarm (CORRIGÉ - Version Matplotlib pure) ──
     with tab2:
         st.markdown("Chaque point représente une observation. "
-                    "**Rouge** = valeur élevée de la feature | "
-                    "**Bleu** = valeur faible.")
+                "**Rouge** = valeur élevée de la feature | "
+                "**Bleu** = valeur faible.")
+    
+    # Créer un beeswarm manuellement avec matplotlib
+    fig, ax = plt.subplots(figsize=(10, 7))
+    
+    # Trier les features par importance
+    sorted_idx = np.argsort(shap_imp.values)
+    features_sorted = [FEATURES_FR[f] for f in FEATURES]
+    features_sorted = [features_sorted[i] for i in sorted_idx]
+    
+    # Pour chaque feature, créer un swarm plot
+    y_positions = []
+    x_positions = []
+    colors = []
+    
+    for i, feat_idx in enumerate(sorted_idx):
+        feat_vals = X_exp_df.iloc[:, feat_idx].values
+        shap_vals = sv[:, feat_idx]
         
-        shap_exp = shap.Explanation(
-            values=sv,
-            base_values=np.full(len(X_exp_df), ev),
-            data=X_exp_df.values,
-            feature_names=[FEATURES_FR[f] for f in FEATURES]
-        )
+        # Ajouter un peu de bruit pour l'effet swarm
+        noise = np.random.normal(0, 0.08, len(shap_vals))
+        y = np.ones(len(shap_vals)) * i + noise
         
-        # Créer une figure avec l'axe
-        fig, ax = plt.subplots(figsize=(10, 7))
+        y_positions.extend(y)
+        x_positions.extend(shap_vals)
         
-        # Appeler beeswarm avec l'axe
-        shap.plots.beeswarm(shap_exp, max_display=14, show=False, ax=ax)
-        ax.set_title("Beeswarm SHAP – Impact de chaque feature sur la prédiction", fontsize=11)
-        fig.tight_layout()
-        st.pyplot(fig)
-        plt.close()
+        # Normaliser les couleurs
+        norm_vals = (feat_vals - feat_vals.min()) / (feat_vals.max() - feat_vals.min() + 1e-8)
+        colors.extend(norm_vals)
+    
+    # Créer le scatter plot
+    scatter = ax.scatter(x_positions, y_positions, c=colors, cmap='RdYlGn_r', 
+                        alpha=0.6, s=8, edgecolors='none')
+    
+    ax.set_yticks(range(len(features_sorted)))
+    ax.set_yticklabels(features_sorted)
+    ax.axvline(0, color='black', lw=0.8, alpha=0.5)
+    ax.set_xlabel('Valeur SHAP (impact sur la prédiction)')
+    ax.set_title('Beeswarm SHAP – Impact de chaque feature sur la prédiction', fontsize=11)
+    plt.colorbar(scatter, ax=ax, label='Valeur de la feature')
+    fig.tight_layout()
+    st.pyplot(fig)
+    plt.close()
 
     # ── Tab 3: Dependence plots ──
     with tab3:
